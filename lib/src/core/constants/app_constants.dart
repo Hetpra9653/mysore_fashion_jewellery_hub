@@ -9,6 +9,7 @@ class AppConstants{
   static const String rupeeSymbol = '₹';
   static const String productId = 'productId';
   static const String isEdit = 'isEdit';
+  static const String existingAddress = 'existingAddress';
 
 
 

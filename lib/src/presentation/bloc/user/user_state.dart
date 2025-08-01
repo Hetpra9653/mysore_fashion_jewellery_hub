@@ -24,3 +24,18 @@ class UserErrorState extends UserState {
 
   UserErrorState(this.error);
 }
+
+class AddressesLoadingState extends UserState {}
+
+class AddressesLoadedState extends UserState {
+  final List<AddressModel> addresses;
+
+  AddressesLoadedState(this.addresses);
+}
+
+class AddressesErrorState extends UserState {
+  final String error;
+
+  AddressesErrorState(this.error);
+}
+

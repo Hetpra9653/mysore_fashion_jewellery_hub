@@ -1,13 +1,20 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_screenutil/flutter_screenutil.dart';
 import 'package:go_router/go_router.dart';
 import 'package:mysore_fashion_jewellery_hub/src/core/constants/app_colors.dart';
 import 'package:mysore_fashion_jewellery_hub/src/core/constants/app_constants.dart';
 import 'package:mysore_fashion_jewellery_hub/src/core/constants/app_text_styles.dart';
 import 'package:mysore_fashion_jewellery_hub/src/core/utils/routes.dart';
+import 'package:mysore_fashion_jewellery_hub/src/data/models/user_model.dart';
+import 'package:mysore_fashion_jewellery_hub/src/presentation/bloc/user/user_bloc.dart';
 import 'package:mysore_fashion_jewellery_hub/src/presentation/widgets/app_button.dart';
 import 'package:mysore_fashion_jewellery_hub/src/presentation/widgets/app_text_field.dart';
-import '../../../../data/models/user_model.dart';
+
+import '../../../../data/dependencyInjector/dependency_injector.dart';
+import '../../../bloc/user/user_event.dart';
+import '../../../bloc/user/user_state.dart';
 
 class DeliveryAddressBottomSheet extends StatefulWidget {
   const DeliveryAddressBottomSheet({super.key});
@@ -20,40 +27,22 @@ class DeliveryAddressBottomSheet extends StatefulWidget {
 class _DeliveryAddressBottomSheetState
     extends State<DeliveryAddressBottomSheet> {
   final TextEditingController _pincodeController = TextEditingController();
+
+  late UserBloc _userBloc;
+
+  List<AddressModel> _addresses = [];
   int _selectedAddressIndex = 0;
 
-  final List<AddressModel> _addresses = [
-    AddressModel(
-      label: 'Home',
-      phoneNumber: '9426920533',
-      addressID: '1',
-      street: 'Building no. 307/4, NRI Colony, Nishatpura Joy agra road',
-      city: 'Jaipur',
-      state: 'Rajasthan',
-      postalCode: '462010',
-      isPrimary: true,
-    ),
-    AddressModel(
-      label: 'Office',
-      phoneNumber: '9426920533',
-      addressID: '2',
-      street: 'Building no. 307/4, NRI Colony, Nishatpura Joy',
-      city: 'Jaipur',
-      state: 'Rajasthan',
-      postalCode: '302020',
-      isPrimary: false,
-    ),
-    AddressModel(
-      label: 'Other',
-      phoneNumber: '9426920533',
-      addressID: '3',
-      street: 'Building no. 307/4, NRI Colony, Nishatpura Joy',
-      city: 'Jaipur',
-      state: 'Rajasthan',
-      postalCode: '302031',
-      isPrimary: false,
-    ),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    _userBloc = sl<UserBloc>();
+
+    final userId = FirebaseAuth.instance.currentUser?.uid;
+    if (userId != null) {
+      _userBloc.add(FetchAddressesEvent(userId: userId));
+    }
+  }
 
   @override
   void dispose() {
@@ -68,12 +57,10 @@ class _DeliveryAddressBottomSheetState
   }
 
   void _handleSubmitPincode() {
-    // Handle pincode submission
     print('Pincode submitted: ${_pincodeController.text}');
   }
 
   void _handleUseCurrentLocation() {
-    // Handle current location selection
     print('Use current location tapped');
   }
 
@@ -82,23 +69,29 @@ class _DeliveryAddressBottomSheetState
   }
 
   void _handleEditAddress(int index) {
-    // Handle edit address
-    print('Edit address at index: $index');
+    final addressToEdit = _addresses[index];
+    context.push(
+      AppRoutes.addAddress,
+      extra: {
+        AppConstants.isEdit: true,
+        AppConstants.existingAddress: addressToEdit,
+      },
+    );
   }
 
   void _handleDeleteAddress(int index) {
-    // Handle delete address
-    setState(() {
-      _addresses.removeAt(index);
-      if (_selectedAddressIndex >= _addresses.length) {
-        _selectedAddressIndex = _addresses.length - 1;
-      }
-    });
+    final addressToDelete = _addresses[index];
+    if (addressToDelete.addressID != null) {
+      _userBloc.add(DeleteAddressEvent(addressId: addressToDelete.addressID!));
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Container(
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.7
+      ),
       decoration: BoxDecoration(
         color: AppColors.scaffoldBackground, // Cream background color
       ),
@@ -145,128 +138,154 @@ class _DeliveryAddressBottomSheetState
             ),
           ),
 
-          // Address List
+          // Address List with BlocBuilder
           Flexible(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(16.r),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Address Cards
-                  ...List.generate(_addresses.length, (index) {
-                    final address = _addresses[index];
-                    return Container(
-                      margin: EdgeInsets.only(bottom: 12.h),
-                      child: _buildAddressCard(address, index),
+            child: BlocBuilder<UserBloc, UserState>(
+              bloc: _userBloc,
+              builder: (context, state) {
+                if (state is UserLoadingState) {
+                  return const Center(child: CircularProgressIndicator());
+                } else if (state is UserLoadedState) {
+                  _addresses = state.user.addresses ?? [];
+
+                  if (_addresses.isEmpty) {
+                    return Center(
+                      child: Text(
+                        "No addresses found. Please add a new address.",
+                        style: TextStyle(fontSize: 16.sp),
+                      ),
                     );
-                  }),
+                  }
 
-                  // Show more addresses link
-                  if (_addresses.length > 3)
-                    Padding(
-                      padding: EdgeInsets.symmetric(vertical: 8.h),
-                      child: GestureDetector(
-                        onTap: () {
-                          // Handle show more addresses
-                        },
-                        child: Text(
-                          '+ ${_addresses.length - 3} more addresses',
-                          style: TextStyle(
-                            color: Colors.brown.shade700,
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                    ),
+                  // Adjust selected index if it goes out of range
+                  if (_selectedAddressIndex >= _addresses.length) {
+                    _selectedAddressIndex = _addresses.length - 1;
+                  }
 
-                  SizedBox(height: 16.h),
-
-                  // Add New Address Button
-                  OutlinedButton(
-                    onPressed: (){
-                      _handleAddNewAddress();
-                    },
-                    style: OutlinedButton.styleFrom(
-                      backgroundColor: AppColors.whiteColor,
-                      side: BorderSide(color: Colors.black),
-                      padding: EdgeInsets.symmetric(vertical: 15.h),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8.r),
-                      ),
-                    ),
-                    child: Text(
-                      'Add New Address',
-                      style: TextStyle(
-                        color: Colors.black87,
-                        fontSize: 16.sp,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-
-                  SizedBox(height: 24.h),
-
-                  Text(
-                    'Use pincode to check delivery info',
-                    style: TextStyle(
-                      fontSize: 16.sp,
-                      fontWeight: FontWeight.w500,
-                      color: Colors.black87,
-                    ),
-                  ),
-
-                  SizedBox(height: 12.h),
-
-                  // Pincode Input
-                  Row(
-                    children: [
-                      Expanded(
-                        flex: 2,
-                        child: AppTextField(
-                          controller: _pincodeController,
-                          hintText: 'Enter Pin code',
-                        ),
-                      ),
-                      SizedBox(width: 12.w),
-                      Expanded(
-                        flex: 1,
-                        child: AppButton(
-                          buttonText: 'Submit',
-                          onPressed: _handleSubmitPincode,
-                        ),
-                      ),
-                    ],
-                  ),
-
-                  SizedBox(height: 16.h),
-
-                  // Current Location Button
-                  GestureDetector(
-                    onTap: _handleUseCurrentLocation,
-                    child: Row(
+                  return SingleChildScrollView(
+                    padding: EdgeInsets.all(16.r),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Icon(
-                          Icons.my_location,
-                          color: Colors.brown.shade700,
-                          size: 20.r,
-                        ),
-                        SizedBox(width: 8.w),
-                        Text(
-                          'Use my current location',
-                          style: TextStyle(
-                            color: Colors.brown.shade700,
-                            fontSize: 14.sp,
-                            fontWeight: FontWeight.w500,
+                        ...List.generate(_addresses.length, (index) {
+                          final address = _addresses[index];
+                          return Container(
+                            margin: EdgeInsets.only(bottom: 12.h),
+                            child: _buildAddressCard(address, index),
+                          );
+                        }),
+
+                        if (_addresses.length > 3)
+                          Padding(
+                            padding: EdgeInsets.symmetric(vertical: 8.h),
+                            child: GestureDetector(
+                              onTap: () {
+                                // Handle show more addresses
+                              },
+                              child: Text(
+                                '+ ${_addresses.length - 3} more addresses',
+                                style: TextStyle(
+                                  color: Colors.brown.shade700,
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+
+                        SizedBox(height: 16.h),
+
+                        OutlinedButton(
+                          onPressed: _handleAddNewAddress,
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: AppColors.whiteColor,
+                            side: const BorderSide(color: Colors.black),
+                            padding: EdgeInsets.symmetric(vertical: 15.h),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.r),
+                            ),
+                          ),
+                          child: Text(
+                            'Add New Address',
+                            style: TextStyle(
+                              color: Colors.black87,
+                              fontSize: 16.sp,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ),
+
+                        SizedBox(height: 24.h),
+
+                        Text(
+                          'Use pincode to check delivery info',
+                          style: TextStyle(
+                            fontSize: 16.sp,
+                            fontWeight: FontWeight.w500,
+                            color: Colors.black87,
+                          ),
+                        ),
+
+                        SizedBox(height: 12.h),
+
+                        // Pincode Input
+                        Row(
+                          children: [
+                            Expanded(
+                              flex: 2,
+                              child: AppTextField(
+                                controller: _pincodeController,
+                                hintText: 'Enter Pin code',
+                              ),
+                            ),
+                            SizedBox(width: 12.w),
+                            Expanded(
+                              flex: 1,
+                              child: AppButton(
+                                buttonText: 'Submit',
+                                onPressed: _handleSubmitPincode,
+                              ),
+                            ),
+                          ],
+                        ),
+
+                        SizedBox(height: 16.h),
+
+                        // Current Location Button
+                        GestureDetector(
+                          onTap: _handleUseCurrentLocation,
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.my_location,
+                                color: Colors.brown.shade700,
+                                size: 20.r,
+                              ),
+                              SizedBox(width: 8.w),
+                              Text(
+                                'Use my current location',
+                                style: TextStyle(
+                                  color: Colors.brown.shade700,
+                                  fontSize: 14.sp,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        SizedBox(height: 24.h),
                       ],
                     ),
-                  ),
-
-                  SizedBox(height: 24.h),
-                ],
-              ),
+                  );
+                } else if (state is UserErrorState) {
+                  return Center(
+                      child: Text('Error loading addresses: ${state.error}'));
+                } else {
+                  // Default loading or idle state
+                  return const Center(child: CircularProgressIndicator());
+                }
+              },
             ),
           ),
         ],

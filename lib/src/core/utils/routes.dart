@@ -145,13 +145,13 @@ final GoRouter router = GoRouter(
         final Map<String, dynamic>? extra =
             state.extra as Map<String, dynamic>?;
         final bool isEdit = extra?[AppConstants.isEdit] ?? '';
-        return AddAddress(isEdit: isEdit);
+        return AddAddressScreen(isEdit: isEdit);
       },
       pageBuilder: (context, state) {
         final Map<String, dynamic>? extra =
             state.extra as Map<String, dynamic>?;
         final bool isEdit = extra?[AppConstants.isEdit] ?? '';
-        return defaultPageBuilder(AddAddress(isEdit: isEdit))(context, state);
+        return defaultPageBuilder(AddAddressScreen(isEdit: isEdit))(context, state);
       },
     ),
   ],

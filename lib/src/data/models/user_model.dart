@@ -38,6 +38,37 @@ class UserModel {
   Map<String, dynamic> toJson() => _$UserModelToJson(this);
 }
 
+extension UserModelCopyWith on UserModel {
+  UserModel copyWith({
+    String? userID,
+    String? name,
+    String? email,
+    String? phone,
+    DateTime? dateOfBirth,
+    String? profilePicture,
+    DateTime? createdAt,
+    List<CartItemModel>? cart,
+    List<AddressModel>? addresses,
+    List<OrderModel>? orders,
+    List<String>? wishlist,
+  }) {
+    return UserModel(
+      userID: userID ?? this.userID,
+      name: name ?? this.name,
+      email: email ?? this.email,
+      phone: phone ?? this.phone,
+      dateOfBirth: dateOfBirth ?? this.dateOfBirth,
+      profilePicture: profilePicture ?? this.profilePicture,
+      createdAt: createdAt ?? this.createdAt,
+      cart: cart ?? this.cart,
+      addresses: addresses ?? this.addresses,
+      orders: orders ?? this.orders,
+      wishlist: wishlist ?? this.wishlist,
+    );
+  }
+}
+
+
 @JsonSerializable(explicitToJson: true)
 class CartItemModel {
   final Product? product;
